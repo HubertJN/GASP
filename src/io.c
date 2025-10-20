@@ -1,5 +1,6 @@
 #include "io.h"
 #include <hdf5.h>
+#include <math.h>
 
 void read_input_grid(int L, int ngrids, int *ising_grids){
 
@@ -131,14 +132,14 @@ int write_ising_grids(int L, int ngrids, int *ising_grids, int isweep, float *ma
 
 int create_ising_grids_hdf5(int L, int ngrids, int tot_nsweeps, double h, double beta, int itask, char* filename) {
     
-
+    /* Create HDF5 file */
     hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
     if (file_id < 0) {
         fprintf(stderr, "Error: failed to create HDF5 file '%s'\n", filename);
         return -1;
     }
 
-    /* Create a scalar dataspace for each header value */
+    /* Create scalar dataspace for headers */
     hid_t sid = H5Screate(H5S_SCALAR);
     if (sid < 0) {
         fprintf(stderr, "Error: failed to create HDF5 scalar dataspace\n");
@@ -147,154 +148,221 @@ int create_ising_grids_hdf5(int L, int ngrids, int tot_nsweeps, double h, double
     }
 
     /* Write integer scalars */
-    hid_t did = H5Dcreate2(file_id, "L", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (did < 0) { fprintf(stderr, "Error: failed to create dataset 'L'\n"); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    if (H5Dwrite(did, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &L) < 0) { fprintf(stderr, "Error: failed to write dataset 'L'\n"); H5Dclose(did); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    H5Dclose(did);
-
-    did = H5Dcreate2(file_id, "ngrids", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (did < 0) { fprintf(stderr, "Error: failed to create dataset 'ngrids'\n"); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    if (H5Dwrite(did, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &ngrids) < 0) { fprintf(stderr, "Error: failed to write dataset 'ngrids'\n"); H5Dclose(did); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    H5Dclose(did);
-
-    did = H5Dcreate2(file_id, "tot_nsweeps", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (did < 0) { fprintf(stderr, "Error: failed to create dataset 'tot_nsweeps'\n"); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    if (H5Dwrite(did, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &tot_nsweeps) < 0) { fprintf(stderr, "Error: failed to write dataset 'tot_nsweeps'\n"); H5Dclose(did); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    H5Dclose(did);
-
-    /* Write double scalars */
-    hid_t did_d = H5Dcreate2(file_id, "h", H5T_NATIVE_DOUBLE, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (did_d < 0) { fprintf(stderr, "Error: failed to create dataset 'h'\n"); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    if (H5Dwrite(did_d, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &h) < 0) { fprintf(stderr, "Error: failed to write dataset 'h'\n"); H5Dclose(did_d); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    H5Dclose(did_d);
-
-    did_d = H5Dcreate2(file_id, "beta", H5T_NATIVE_DOUBLE, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (did_d < 0) { fprintf(stderr, "Error: failed to create dataset 'beta'\n"); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    if (H5Dwrite(did_d, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &beta) < 0) { fprintf(stderr, "Error: failed to write dataset 'beta'\n"); H5Dclose(did_d); H5Sclose(sid); H5Fclose(file_id); return -1; }
-    H5Dclose(did_d);
-
-    /* Create and initialize total_saved_grids header to 0 */
-    hid_t did_tot = H5Dcreate2(file_id, "total_saved_grids", H5T_NATIVE_INT, sid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (did_tot < 0) {
-        fprintf(stderr, "Warning: failed to create dataset 'total_saved_grids'\n");
-    } else {
-        int total_grids = 0;
-        if (H5Dwrite(did_tot, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &total_grids) < 0) {
-            fprintf(stderr, "Warning: failed to initialize 'total_saved_grids'\n");
-        }
-        H5Dclose(did_tot);
+    int int_vals[3] = {L, ngrids, tot_nsweeps};
+    const char *int_names[3] = {"L", "ngrids", "tot_nsweeps"};
+    for (int i = 0; i < 3; ++i) {
+        hid_t did = H5Dcreate2(file_id, int_names[i], H5T_NATIVE_INT, sid,
+                               H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        if (did < 0) { fprintf(stderr, "Error: failed to create dataset '%s'\n", int_names[i]); continue; }
+        H5Dwrite(did, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &int_vals[i]);
+        H5Dclose(did);
     }
 
-    /* Cleanup */
+    /* Write double scalars */
+    double dbl_vals[2] = {h, beta};
+    const char *dbl_names[2] = {"h", "beta"};
+    for (int i = 0; i < 2; ++i) {
+        hid_t did = H5Dcreate2(file_id, dbl_names[i], H5T_NATIVE_DOUBLE, sid,
+                               H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        if (did < 0) { fprintf(stderr, "Error: failed to create dataset '%s'\n", dbl_names[i]); continue; }
+        H5Dwrite(did, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &dbl_vals[i]);
+        H5Dclose(did);
+    }
+
+    /* Create total_saved_grids header initialized to 0 */
+    hid_t did_tot = H5Dcreate2(file_id, "total_saved_grids", H5T_NATIVE_HSIZE, sid,
+                               H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    if (did_tot >= 0) {
+        hsize_t total = 0;
+        H5Dwrite(did_tot, H5T_NATIVE_HSIZE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &total);
+        H5Dclose(did_tot);
+    } else {
+        fprintf(stderr, "Warning: failed to create dataset 'total_saved_grids'\n");
+    }
+
+    /* Done with scalar dataspace */
     H5Sclose(sid);
+
+    /* Compute bytes per packed grid */
+    size_t nbits = (size_t)L * (size_t)L;
+    size_t nbytes = (nbits + 7) / 8;
+
+    /* Create chunked datasets for grids and attrs (unlimited first dimension) */
+    hsize_t dims[2] = {0, nbytes};
+    hsize_t maxdims[2] = {H5S_UNLIMITED, nbytes};
+    hid_t space = H5Screate_simple(2, dims, maxdims);
+    hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    hsize_t chunk_g[2] = {1, nbytes};
+    H5Pset_chunk(dcpl, 2, chunk_g);
+    hid_t d_grids = H5Dcreate2(file_id, "grids", H5T_NATIVE_UCHAR, space,
+                               H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    H5Dclose(d_grids);
+    H5Sclose(space);
+    H5Pclose(dcpl);
+
+    /* Create attrs dataset: 4 doubles per row */
+    hsize_t adims[2] = {0, 4};
+    hsize_t amax[2] = {H5S_UNLIMITED, 4};
+    space = H5Screate_simple(2, adims, amax);
+    dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    hsize_t achunk[2] = {1024, 4};
+    H5Pset_chunk(dcpl, 2, achunk);
+    hid_t d_attrs = H5Dcreate2(file_id, "attrs", H5T_NATIVE_DOUBLE, space,
+                               H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    H5Dclose(d_attrs);
+    H5Sclose(space);
+    H5Pclose(dcpl);
+
+    /* Close file */
     H5Fclose(file_id);
 
     return 0;
 }
 
 int write_ising_grids_hdf5(int L, int ngrids, int *ising_grids, int isweep, float *magnetisation, float *lclus_size, char *cv, double dn_thr, double up_thr, char* filename) {
+    /* Setup data output filter based on thresholds*/
+    float *filter = NULL;
+    if (strcmp(cv, "magnetisation") == 0) {
+        filter = magnetisation;
+    } else if (strcmp(cv, "largest_cluster") == 0) {
+        filter = lclus_size;
+    } else {
+        fprintf(stderr, "Error: invalid cv '%s'\n", cv);
+        exit(1);
+    }
+
     //const char *filename = "gridstates.hdf5";
     hid_t file_id = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
     if (file_id < 0) {
-        fprintf(stderr, "Error: failed to open HDF5 file '%s' for writing\n", filename);
+        fprintf(stderr, "Error: cannot open '%s'\n", filename);
         return -1;
     }
 
-    char groupname[64];
-    snprintf(groupname, sizeof(groupname), "/sweep_%d", isweep);
+    /* Compute bytes per (packed) grid */
+    size_t nbits = (size_t)L * (size_t)L;
+    size_t nbytes = (nbits + 7) / 8;
 
-    hid_t grp = H5Gcreate2(file_id, groupname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (grp < 0) {
-        fprintf(stderr, "Error: failed to create group '%s' in HDF5 file\n", groupname);
+    /* Dataset creation property list (chunked) */
+    hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    hsize_t chunk_g[2] = { 1, (hsize_t)nbytes };
+    H5Pset_chunk(dcpl, 2, chunk_g);
+
+    /* Open datasets directly (assume they already exist) */
+    hid_t d_grids = H5Dopen2(file_id, "grids", H5P_DEFAULT);
+    hid_t d_attrs = H5Dopen2(file_id, "attrs", H5P_DEFAULT);
+    hid_t d_tot   = H5Dopen2(file_id, "total_saved_grids", H5P_DEFAULT);
+
+    if (d_grids < 0 || d_attrs < 0 || d_tot < 0) {
+        fprintf(stderr, "Error: failed to open one or more datasets\n");
+        if (d_grids >= 0) H5Dclose(d_grids);
+        if (d_attrs >= 0) H5Dclose(d_attrs);
+        if (d_tot >= 0) H5Dclose(d_tot);
+        H5Pclose(dcpl);
         H5Fclose(file_id);
         return -1;
     }
 
-     /* Count successfully written grids and update total_saved_grids accordingly.
-         Do not create the dataset here; assume it exists (created by create_ising_grids_hdf5).
-     */
-     int counter = 0;
+    /* Get current sizes */
+    hid_t gs = H5Dget_space(d_grids);
+    hsize_t gdims[2];
+    H5Sget_simple_extent_dims(gs, gdims, NULL);
+    H5Sclose(gs);
+    hsize_t start_idx = gdims[0];
 
-    /* Prepare string datatype for attributes (variable-length C strings) */
-    hid_t str_tid = H5Tcopy(H5T_C_S1);
-    H5Tset_size(str_tid, H5T_VARIABLE);
-    hid_t attr_sid = H5Screate(H5S_SCALAR);
+    hid_t as = H5Dget_space(d_attrs);
+    hsize_t adims_cur[2];
+    H5Sget_simple_extent_dims(as, adims_cur, NULL);
+    H5Sclose(as);
 
-    hsize_t dims[2]; dims[0] = L; dims[1] = L;
-
-    for (int g = 0; g < ngrids; ++g) {
-        char dsetname[64];
-        snprintf(dsetname, sizeof(dsetname), "grid_%d", g);
-
-        hid_t dspace = H5Screate_simple(2, dims, NULL);
-        if (dspace < 0) {
-            fprintf(stderr, "Error: failed to create dataspace for '%s'\n", dsetname);
-            continue;
-        }
-
-        hid_t dset = H5Dcreate2(grp, dsetname, H5T_NATIVE_INT, dspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        if (dset < 0) {
-            fprintf(stderr, "Error: failed to create dataset '%s'\n", dsetname);
-            H5Sclose(dspace);
-            continue;
-        }
-
-        /* Write grid data: pointer to start of this grid */
-        int *data_ptr = &ising_grids[g * L * L];
-        if (H5Dwrite(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_ptr) < 0) {
-            fprintf(stderr, "Error: failed to write dataset '%s'\n", dsetname);
-        } else {
-            /* increment counter only on successful write */
-            counter++;
-        }
-
-        /* Prepare attribute strings */
-        const char *mstr = "null";
-        char mval[64];
-        if (magnetisation != NULL) {
-            snprintf(mval, sizeof(mval), "%g", (double)magnetisation[g]);
-            mstr = mval;
-        }
-        hid_t attr = H5Acreate2(dset, "magnetisation", str_tid, attr_sid, H5P_DEFAULT, H5P_DEFAULT);
-        if (attr >= 0) { H5Awrite(attr, str_tid, &mstr); H5Aclose(attr); }
-
-        const char *lstr = "null";
-        char lval[64];
-        if (lclus_size != NULL) {
-            snprintf(lval, sizeof(lval), "%g", (double)lclus_size[g]);
-            lstr = lval;
-        }
-        attr = H5Acreate2(dset, "lclus_size", str_tid, attr_sid, H5P_DEFAULT, H5P_DEFAULT);
-        if (attr >= 0) { H5Awrite(attr, str_tid, &lstr); H5Aclose(attr); }
-
-        /* Dummy entries for committor and committor_error, initialized to "null" */
-        const char *cnull = "null";
-        attr = H5Acreate2(dset, "committor", str_tid, attr_sid, H5P_DEFAULT, H5P_DEFAULT);
-        if (attr >= 0) { H5Awrite(attr, str_tid, &cnull); H5Aclose(attr); }
-
-        attr = H5Acreate2(dset, "committor_error", str_tid, attr_sid, H5P_DEFAULT, H5P_DEFAULT);
-        if (attr >= 0) { H5Awrite(attr, str_tid, &cnull); H5Aclose(attr); }
-
-        H5Dclose(dset);
-        H5Sclose(dspace);
+    /* Count how many grids pass filter */
+    int nsave = 0;
+    for (int g = 0; g < ngrids; g++) {
+        //printf("%f %f %f \n", dn_thr, filter[g], up_thr);
+        if (filter[g] >= dn_thr && filter[g] <= up_thr)
+            nsave++;
     }
 
-    H5Sclose(attr_sid);
-    H5Tclose(str_tid);
-    H5Gclose(grp);
-
-    /* Update total_saved_grids without error checks; if no grids written delete the sweep group */
-    if (counter > 0) {
-        hid_t tot_did = H5Dopen2(file_id, "total_saved_grids", H5P_DEFAULT);
-        int total_saved = 0;
-        H5Dread(tot_did, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &total_saved);
-        total_saved += counter;
-        H5Dwrite(tot_did, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &total_saved);
-        H5Dclose(tot_did);
+    if (nsave == 0) {
+        //printf("No grids passed the filter.\n");
+        H5Dclose(d_grids);
+        H5Dclose(d_attrs);
+        H5Dclose(d_tot);
+        H5Pclose(dcpl);
+        H5Fclose(file_id);
+        return 0;
     } else {
-        H5Ldelete(file_id, groupname, H5P_DEFAULT);
+        //printf("%d grids passed the filter and will be saved.\n", nsave);
     }
 
+
+    /* Extend datasets */
+    hsize_t new_gdims[2] = { start_idx + (hsize_t)nsave, (hsize_t)nbytes };
+    H5Dset_extent(d_grids, new_gdims);
+
+    hsize_t new_adims[2] = { adims_cur[0] + (hsize_t)nsave, 4 };
+    H5Dset_extent(d_attrs, new_adims);
+
+    /* Allocate memory buffers */
+    unsigned char *buf = (unsigned char *)malloc(nbytes);
+    if (!buf) {
+        fprintf(stderr, "Error: failed to allocate memory\n");
+        exit(1);
+    }
+
+    double attrrow[4];
+    hsize_t write_idx = 0;
+
+    /* Write grids and attributes */
+    for (int g = 0; g < ngrids; ++g) {
+        if (filter[g] < dn_thr || filter[g] > up_thr) continue;  // skip outside range
+
+        memset(buf, 0, nbytes);
+        int *grid_ptr = &ising_grids[g * L * L];
+        size_t ibit = 0, ibyte = 0;
+        for (size_t i = 0; i < nbits; ++i) {
+            if (grid_ptr[i] == 1) buf[ibyte] |= (unsigned char)(1U << ibit);
+            ibit++; if (ibit == 8) { ibit = 0; ibyte++; }
+        }
+
+        /* Write grids hyperslab */
+        hid_t filespace = H5Dget_space(d_grids);
+        hsize_t start[2] = { start_idx + write_idx, 0 };
+        hsize_t count[2] = { 1, (hsize_t)nbytes };
+        H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL);
+        hsize_t mdims[2] = { 1, (hsize_t)nbytes };
+        hid_t mspace = H5Screate_simple(2, mdims, NULL);
+        H5Dwrite(d_grids, H5T_NATIVE_UCHAR, mspace, filespace, H5P_DEFAULT, buf);
+        H5Sclose(mspace);
+        H5Sclose(filespace);
+
+        /* Write attrs hyperslab */
+        attrrow[0] = (magnetisation ? (double)magnetisation[g] : NAN);
+        attrrow[1] = (lclus_size ? (double)lclus_size[g] : NAN);
+        attrrow[2] = NAN; /* committor placeholder */
+        attrrow[3] = NAN; /* committor_error placeholder */
+
+        hid_t afilespace = H5Dget_space(d_attrs);
+        hsize_t astart[2] = { adims_cur[0] + write_idx, 0 };
+        hsize_t acount[2] = { 1, 4 };
+        H5Sselect_hyperslab(afilespace, H5S_SELECT_SET, astart, NULL, acount, NULL);
+        hsize_t amdims[2] = { 1, 4 };
+        hid_t amspace = H5Screate_simple(2, amdims, NULL);
+        H5Dwrite(d_attrs, H5T_NATIVE_DOUBLE, amspace, afilespace, H5P_DEFAULT, attrrow);
+        H5Sclose(amspace);
+        H5Sclose(afilespace);
+
+        write_idx++;
+    }
+
+    /* Update total_saved_grids */
+    hsize_t new_total = start_idx + (hsize_t)nsave;
+    H5Dwrite(d_tot, H5T_NATIVE_HSIZE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &new_total);
+
+    free(buf);
+    H5Dclose(d_grids);
+    H5Dclose(d_attrs);
+    H5Dclose(d_tot);
+    H5Pclose(dcpl);
     H5Fclose(file_id);
 
     return 0;

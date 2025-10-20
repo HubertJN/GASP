@@ -759,11 +759,11 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
             fflush(stdout);
 #endif
 #ifdef PYTHON
-            PySys_WriteStdout("\r Sweep : %10d, Reached cv = %6.2f : %4d , Reached cv = %6.2f : %4d , Unresolved : %4d",
+            PySys_WriteStdout("\r Sweep : %10d, Reached cv = %6.2f : %4d , Reached cv = %6.2f : %4d , Unresolved : %4d    ",
             isweep, dn_thr, nA, up_thr, nB, ngrids-nA-nB );
             //PySys_WriteStdout("\r colvar : %10f",colvar[0]);
 #endif
-            if (nA + nB == ngrids) break; // all fates resolved
+            if (nA + nB == ngrids) break; // All fates resolved
         
         } // task 
       }
