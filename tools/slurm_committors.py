@@ -1,6 +1,8 @@
 import os
 import argparse
 import gasp
+import numpy as np
+import h5py
 from tools.utils import load_into_array, load_config
 
 # --- parse optional inputs ---
@@ -21,7 +23,7 @@ up_threshold = config.collective_variable.up_threshold
 
 # --- load dataset ---
 training_path = f"data/gridstates_training_{beta:.3f}_{h:.3f}.hdf5"
-grids, _, headers = load_into_array(training_path)
+grids, attrs, headers = load_into_array(training_path)
 
 L = headers["L"]
 gpu_nsms = gasp.gpu_nsms - gasp.gpu_nsms % config.gpu.sm_mult
@@ -35,9 +37,13 @@ task_id = task_id % num_tasks
 chunk_size = (len(grids) + num_tasks - 1) // num_tasks
 start_idx = task_id * chunk_size
 end_idx = min((task_id + 1) * chunk_size, len(grids))
+
 grids = grids[start_idx:end_idx]
+attrs = attrs[start_idx:end_idx]
 
 outpath = os.path.join(config.paths.save_dir, f"attrs_task{task_id}_{beta:.3f}_{h:.3f}.hdf5")
+total_rows = len(grids)
+ncols = attrs.shape[1]
 
 print(f"[Task {task_id}] Processing grids {start_idx}:{end_idx} of {len(grids)}")
 print(f"Saving output to {outpath}")
