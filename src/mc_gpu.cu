@@ -706,10 +706,8 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
       }
       
       // Writing of the grids can be happening on the host while the device runs the mc_sweep kernel
-      if ( itask == 0) {
-        if (isweep%grid_output_int==0 || isweep==tot_nsweeps-1){
-            outfunc(L, ngrids, ising_grids, isweep, magnetisation, lclus_size, cv, dn_thr, up_thr, filename);  
-        }
+      if (isweep%grid_output_int==0 || isweep==tot_nsweeps-1){
+        outfunc(L, ngrids, ising_grids, isweep, magnetisation, lclus_size, cv, dn_thr, up_thr, filename);  
       }
 
       // Write and report cv - can also be happening while the device runs the mc_sweep kernel
