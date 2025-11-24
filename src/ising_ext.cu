@@ -358,8 +358,9 @@ int append_grids_list(int L, int ngrids, int* grid_data, int isweep, float* magn
   } // end if recording largest cluster size
 
   // Always call the hdf5 writer
+  if (strcmp(filename, "None") != 0) {
   int iret = write_ising_grids_hdf5(L, ngrids, grid_data, isweep, magnetisation, lclus_size, cv, dn_thr, up_thr, filename);
-
+    
   if (iret != 0) {
     PyErr_SetString(PyExc_RuntimeError, "Error writing HDF5 file");
     return -1;
@@ -368,6 +369,7 @@ int append_grids_list(int L, int ngrids, int* grid_data, int isweep, float* magn
   // If we're maintaining a history of grids in RAM then proceed, otherwise we're done
   if (!grid_history || ihist >= maxhist) {
     return iret;
+  }
   }
 
   // Dimensions of NumPy array member of GridSnapObjects
