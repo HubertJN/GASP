@@ -200,12 +200,12 @@ int create_ising_grids_hdf5(int L, int ngrids, int tot_nsweeps, double h, double
     H5Sclose(space);
     H5Pclose(dcpl);
 
-    /* Create attrs dataset: 4 doubles per row */
-    hsize_t adims[2] = {0, 4};
-    hsize_t amax[2] = {H5S_UNLIMITED, 4};
+    /* Create attrs dataset: 5 doubles per row */
+    hsize_t adims[2] = {0, 5};
+    hsize_t amax[2] = {H5S_UNLIMITED, 5};
     space = H5Screate_simple(2, adims, amax);
     dcpl = H5Pcreate(H5P_DATASET_CREATE);
-    hsize_t achunk[2] = {1024, 4};
+    hsize_t achunk[2] = {1024, 5};
     H5Pset_chunk(dcpl, 2, achunk);
     hid_t d_attrs = H5Dcreate2(file_id, "attrs", H5T_NATIVE_DOUBLE, space,
                                H5P_DEFAULT, dcpl, H5P_DEFAULT);
@@ -299,7 +299,7 @@ int write_ising_grids_hdf5(int L, int ngrids, int *ising_grids, int isweep, floa
     hsize_t new_gdims[2] = { start_idx + (hsize_t)nsave, (hsize_t)nbytes };
     H5Dset_extent(d_grids, new_gdims);
 
-    hsize_t new_adims[2] = { adims_cur[0] + (hsize_t)nsave, 4 };
+    hsize_t new_adims[2] = { adims_cur[0] + (hsize_t)nsave, 5 };
     H5Dset_extent(d_attrs, new_adims);
 
     /* Allocate memory buffers */
@@ -309,7 +309,7 @@ int write_ising_grids_hdf5(int L, int ngrids, int *ising_grids, int isweep, floa
         exit(1);
     }
 
-    double attrrow[4];
+    double attrrow[5];
     hsize_t write_idx = 0;
 
     /* Write grids and attributes */
@@ -340,12 +340,13 @@ int write_ising_grids_hdf5(int L, int ngrids, int *ising_grids, int isweep, floa
         attrrow[1] = (lclus_size ? (double)lclus_size[g] : NAN);
         attrrow[2] = NAN; /* committor placeholder */
         attrrow[3] = NAN; /* committor_error placeholder */
+        attrrow[4] = (double)g; /* grid id*/
 
         hid_t afilespace = H5Dget_space(d_attrs);
         hsize_t astart[2] = { adims_cur[0] + write_idx, 0 };
-        hsize_t acount[2] = { 1, 4 };
+        hsize_t acount[2] = { 1, 5 };
         H5Sselect_hyperslab(afilespace, H5S_SELECT_SET, astart, NULL, acount, NULL);
-        hsize_t amdims[2] = { 1, 4 };
+        hsize_t amdims[2] = { 1, 5 };
         hid_t amspace = H5Screate_simple(2, amdims, NULL);
         H5Dwrite(d_attrs, H5T_NATIVE_DOUBLE, amspace, afilespace, H5P_DEFAULT, attrrow);
         H5Sclose(amspace);
