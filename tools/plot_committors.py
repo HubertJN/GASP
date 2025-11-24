@@ -1,17 +1,32 @@
 import numpy as np
 import h5py
+import argparse
 import matplotlib.pyplot as plt
 from tools.utils import load_into_array, load_config
 
-# --- Load config and data ---
-config = load_config("config.yaml")
-grids, attrs, headers = load_into_array(config.paths.training)
+# --- parse optional inputs ---
+parser = argparse.ArgumentParser()
+parser.add_argument("--beta", type=float, help="Override beta value")
+parser.add_argument("--h", type=float, help="Override h value")
+args = parser.parse_args()
 
-print(f"Loaded {config.paths.training}")
+# --- load config ---
+config = load_config("config.yaml")
+
+# --- apply overrides ---
+beta = args.beta if args.beta is not None else config.parameters.beta
+h = args.h if args.h is not None else config.parameters.h
+
+# --- load dataset ---
+training_path = f"data/gridstates_training_{beta:.3f}_{h:.3f}.hdf5"
+_, attrs, headers = load_into_array(training_path, load_grids=False)
+
+print(f"Loaded {training_path}")
 
 # --- Extract committor values ---
 committor = attrs[:, 2]
 committor_error = attrs[:,3]
+print(committor)
 print(np.median(committor_error))
 cluster = attrs[:,1]
 idx = ~np.isnan(committor)
