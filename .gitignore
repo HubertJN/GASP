@@ -9,3 +9,4 @@ committor-predictor
 data/*
 figures/*
 .venv/
+obj/
