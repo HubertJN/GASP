@@ -2,24 +2,24 @@ simulation:
     L: 64
     ngrids_factor: 4
     threads_per_block: 32
-    nsweeps: 50000
+    nsweeps: 10000
 
 comm:
     nsweeps: 50000
     ngrids: 4096
 
 parameters:
-    beta: 0.55   # inverse temperature (range: 0.53–0.6)
-    h: 0.082     # external field (range: 0.03–0.1)
+    beta: 0.511   # inverse temperature (range: 0.53–0.6)
+    h: 0.04     # external field (range: 0.03–0.1)
 
 output:
-    grid_output_int: 100   # multiple of mag_output_int
-    mag_output_int: 100    # frequency for CV computation
+    grid_output_int: 1   # multiple of mag_output_int
+    mag_output_int: 1    # frequency for CV computation
 
 collective_variable:
     type: "largest_cluster"
-    up_threshold: 800.5
-    dn_threshold: 2.5
+    up_threshold: 4096
+    dn_threshold: 0
 
 paths:
     gridstates: "data/gridstates_{parameters[beta]:.3f}_{parameters[h]:.3f}.hdf5"
