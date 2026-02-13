@@ -549,18 +549,26 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
 
   char *cv="magnetisation";                          // Collective variable to use in determining fate
 
+  char *dynamics = "spin_flip";                      // Dynamics to use - currently only spin flip or kawasaki.
+
   /* list of keywords */
-  static char* kwlist[] = {"L", "ngrid", "tot_nsweeps", "beta", "h",
+  static char* kwlist[] = {"L", "ngrid", "tot_nsweeps", "beta", "h", "dynamics",
     "initial_spin", "cv", "up_threshold", "dn_threshold", "mag_output_int",
     "grid_output_int", "keep_grids", "max_keep_grids", "threadsPerBlock", "gpu_method", NULL};
 
   /* Parse the input tuple */
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "iiidd|isddiipiii", kwlist,
-                   &L, &ngrids, &tot_nsweeps, &beta, &h, &initial_spin, &cv,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "iiidd|sisddiipiii", kwlist,
+                   &L, &ngrids, &tot_nsweeps, &beta, &h, &dynamics, &initial_spin, &cv,
                    &up_threshold, &dn_threshold, &mag_output_int,
                    &grid_output_int, &keep_grids, &max_keep_grids, &threadsPerBlock, &gpu_method)) {
     return NULL;
    }
+
+  /* Validate dynamics argument */
+  if (strcmp(dynamics, "spin_flip") != 0 && strcmp(dynamics, "kawasaki") != 0) {
+    PyErr_SetString(PyExc_ValueError, "dynamics must be either 'spin_flip' or 'kawasaki'");
+    return NULL;
+  }
 
   /* Validate cv argument */
   if (strcmp(cv, "magnetisation") != 0 && strcmp(cv, "largest_cluster") != 0) {
@@ -649,7 +657,8 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
     /* Pack arguments into structures */
     mc_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
     mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
-    mc_function_t calc; calc.itask = 0; calc.cv = cv; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = result; calc.filename="gridstates.hdf5";
+    mc_function_t calc; calc.itask = 0; calc.cv = cv; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = result;
+    calc.filename="gridstates.hdf5"; calc.dynamics = dynamics;
 
     /* Write stdout output header*/
 #ifndef PYTHON
@@ -688,7 +697,8 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
     mc_gpu_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
     grids.d_ising_grids = d_ising_grids; grids.d_neighbour_list = d_neighbour_list;
     mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
-    mc_function_t calc; calc.initial_spin = initial_spin; calc.cv = cv; calc.itask = 0; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = result; calc.filename="gridstates.hdf5";
+    mc_function_t calc; calc.initial_spin = initial_spin; calc.cv = cv; calc.itask = 0; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; 
+    calc.ninputs = 1; calc.result = result; calc.filename="gridstates.hdf5"; calc.dynamics = dynamics;
     gpu_run_t gpu_state; gpu_state.d_state = d_state;  gpu_state.threadsPerBlock = threadsPerBlock; gpu_state.gpu_method = gpu_method;
 
     /* Write stdout output header*/
@@ -830,6 +840,7 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
   int gpu_method = 0;                                // GPU method to use - see mc_gpu.cu
 
   char* cv = "magnetisation";                        // Collective variable to use in determining fate
+  char* dynamics = "spin_flip";                      // Dynamics to use - currently only spin flip or kawasaki.
 
   const char* grid_input = "gridstates.bin";         // Input file for grids or "NumPy" if passing grid_array
   PyObject* grid_array_obj = NULL;                   // List of NumPy arrays for initial grids
@@ -837,15 +848,21 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
   int nsms = gpu_nsms;                               // Number of GPU multiprocessors to use (all by default)
 
   /* list of keywords */
-  static char* kwlist[] = {"L", "ngrid", "tot_nsweeps", "beta", "h",
+  static char* kwlist[] = {"L", "ngrid", "tot_nsweeps", "beta", "h", "dynamics",
     "initial_spin", "cv", "up_threshold", "dn_threshold", "mag_output_int",
     "grid_output_int", "keep_grids", "max_keep_grids", "threadsPerBlock", "gpu_method", "grid_input", "grid_array", "nsms", NULL};
 
   /* Parse the input tuple */ 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "iiidd|isddiipiiisOi", kwlist,
-       &L, &ngrids, &tot_nsweeps, &beta, &h, &initial_spin, &cv,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "iiidd|sisddiipiiisOi", kwlist,
+       &L, &ngrids, &tot_nsweeps, &beta, &h, &dynamics, &initial_spin, &cv,
        &up_threshold, &dn_threshold, &mag_output_int,
        &grid_output_int, &keep_grids, &max_keep_grids, &threadsPerBlock, &gpu_method, &grid_input, &grid_array_obj, &nsms)) {
+    return NULL;
+  }
+
+  /* Validate dynamics argument */
+  if (strcmp(dynamics, "spin_flip") != 0 && strcmp(dynamics, "kawasaki") != 0) {
+    PyErr_SetString(PyExc_ValueError, "dynamics must be either 'spin_flip' or 'kawasaki'");
     return NULL;
   }
 
@@ -1020,7 +1037,7 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
     mc_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
     mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
     mc_function_t calc; calc.itask = 1; calc.initial_spin = initial_spin; calc.cv = cv; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold;
-    calc.ninputs = grid_array_count; calc.result=result; calc.filename = "pBgrids.hdf5";
+    calc.ninputs = grid_array_count; calc.result=result; calc.filename = "pBgrids.hdf5"; calc.dynamics = dynamics;
 
     /* Create HDF5 file and write attributes */
     create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
@@ -1055,7 +1072,7 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
     grids.d_ising_grids = d_ising_grids; grids.d_neighbour_list = d_neighbour_list;
     mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
     mc_function_t calc; calc.itask = 1; calc.cv = cv; calc.initial_spin = initial_spin; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold;
-    calc.ninputs = grid_array_count; calc.result=result; calc.filename = "pBgrids.hdf5";
+    calc.ninputs = grid_array_count; calc.result=result; calc.filename = "pBgrids.hdf5"; calc.dynamics = dynamics;
     gpu_run_t gpu_state; gpu_state.d_state = d_state;  gpu_state.threadsPerBlock = threadsPerBlock; gpu_state.gpu_method = gpu_method;
 
     /* Create HDF5 file and write attributes */

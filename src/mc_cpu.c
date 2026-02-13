@@ -7,10 +7,70 @@
 #include <Python.h>
 #endif
 
-double Pacc[20];         // Cache of acceptance probabilities
+double Pacc[20];         // Cache of acceptance probabilities for spin flip moves
+double PaccKaw_2NN[100]; // Cache of acceptance probabilities for Kawasaki moves
 
 
-// populate acceptance probabilities
+// Compute the index within PaccKaw_2NN for a given move. The index is determined 
+// by the spins of the two sites being swapped (Si, Sj) and the sum of their 4 nearest
+// neighbours (Ni, Nj). Each of these can take on a limited number of values, so we can
+// pre-compute the acceptance probabilities for all combinations and store them in an
+// array for fast lookup during the simulation.
+static inline int kawasaki_index_4NN(int si, int sj, int n_i, int n_j) {
+  int Si = (si + 1) / 2;    // 0 or 1
+  int Sj = (sj + 1) / 2;    // 0 or 1
+  int Ni = (n_i + 4) / 2;   // 0..4
+  int Nj = (n_j + 4) / 2;   // 0..4
+  return (((Si * 2 + Sj) * 5 + Ni) * 5 + Nj); // 0..99
+}
+
+
+// populate acceptance probabilities - Kawasaki moves.
+// NOTE: 'h' is ignored for exchange with uniform field (it cancels).
+void preComputeProbsKawasaki_4NN_cpu(double beta, double h_ignored) {
+
+  int si_vals[2] = {-1, +1};
+  int sj_vals[2] = {-1, +1};
+  int n_vals[5]  = {-4, -2, 0,  2,  4};
+
+  for (int a = 0; a < 2; ++a) {
+    int si = si_vals[a];
+    for (int b = 0; b < 2; ++b) {
+      int sj = sj_vals[b];
+
+      for (int u = 0; u < 5; ++u) {
+        int n_i = n_vals[u];
+        for (int v = 0; v < 5; ++v) {
+          int n_j = n_vals[v];
+
+          int idx = kawasaki_index_4NN(si, sj, n_i, n_j);
+
+          double dE;
+          if (si == sj) {
+            // Swapping identical spins leaves configuration unchanged.
+            dE = 0.0;
+          } else {
+            // Use 3-NN sums derived from 4-NN sums:
+            int Sigma_i_excl = n_i - sj; // sum of the 3 neighbors of i excluding j
+            int Sigma_j_excl = n_j - si; // sum of the 3 neighbors of j excluding i
+            dE = 2.0 * (si * Sigma_i_excl + sj * Sigma_j_excl); // J = 1
+          }
+
+          double w = exp(-beta * dE);
+          // If you want pure Metropolis prob, clamp to 1.0:
+          // if (w > 1.0) w = 1.0;
+          PaccKaw_2NN[idx] = w;
+        }
+      }
+    }
+  }
+}
+
+
+
+
+
+// populate acceptance probabilities - spin flip moves
 void preComputeProbs_cpu(double beta, double h) {
 
   // Pre-compute acceptance probabilities for all possibilities
@@ -36,6 +96,85 @@ void preComputeProbs_cpu(double beta, double h) {
   }
 
 }     
+
+// sweep on the cpu
+void mc_sweep_kawasaki_cpu(int L, int *ising_grids, int grid_index, double beta, double h, int nsweeps) {
+
+  // Pointer to the current Ising grid
+  int *loc_grid = &ising_grids[grid_index*L*L];
+
+  int imove, row, col;
+
+  for (imove=0;imove<L*L*nsweeps;imove++){
+
+    // pick random spin
+    row = floor(L*genrand_real3());  // RNG cannot generate 1.0 so safe
+    col = floor(L*genrand_real3()); 
+
+    // find neighbours
+    int my_idx = L*row+col;
+    int my_up_idx = L*((row+L-1)%L) + col;  
+    int my_dn_idx = L*((row+1)%L)   + col;   
+    int my_rt_idx = L*row + (col+1)%L;
+    int my_lt_idx = L*row + (col+L-1)%L;
+    
+    // pick random neighbour to swap with
+    int n_idx;
+    int n_row, n_col;
+    int direction = floor(4*genrand_real3());
+    if (direction == 0) { // up
+      n_row = (row + L - 1) % L;
+      n_col = col;
+      n_idx = my_up_idx;
+    } else if (direction == 1) { // down
+      n_row = (row + 1) % L;
+      n_col = col;
+      n_idx = my_dn_idx;
+    } else if (direction == 2) { // right
+      n_row = row;
+      n_col = (col + 1) % L;
+      n_idx = my_rt_idx;
+    } else { // left
+      n_row = row;
+      n_col = (col + L - 1) % L;
+      n_idx = my_lt_idx;
+    }
+
+    // find neighbours of n_idx
+    int n_up_idx = L*((n_row+L-1)%L) + n_col;  
+    int n_dn_idx = L*((n_row+1)%L)   + n_col;   
+    int n_rt_idx = L*n_row + (n_col+1)%L;
+    int n_lt_idx = L*n_row + (n_col+L-1)%L;
+
+    // compute index for acceptance probability lookup
+    int si = loc_grid[my_idx];
+    int sj = loc_grid[n_idx];
+    int n_i = loc_grid[my_up_idx] + loc_grid[my_dn_idx] + loc_grid[my_lt_idx] + loc_grid[my_rt_idx];
+    int n_j = loc_grid[n_up_idx] + loc_grid[n_dn_idx] + loc_grid[n_lt_idx] + loc_grid[n_rt_idx];
+    int index = kawasaki_index_4NN(si, sj, n_i, n_j);
+
+    // perform swap    int temp = loc_grid[my_idx];
+    int temp = loc_grid[my_idx];
+    loc_grid[my_idx] = loc_grid[n_idx];
+    loc_grid[n_idx] = temp;
+    
+    double xi = genrand_real3();
+    //if (xi < prob) {
+    if (xi < PaccKaw_2NN[index] ) {
+      // accept
+      //fprintf(stderr,"Accepted a move\n");
+    } else {
+      // reject - swap back
+      temp = loc_grid[my_idx];
+      loc_grid[my_idx] = loc_grid[n_idx];
+      loc_grid[n_idx] = temp;
+    }
+
+
+  } // end for
+
+}
+
 
 // sweep on the cpu
 void mc_sweep_cpu(int L, int *ising_grids, int grid_index, double beta, double h, int nsweeps) {
@@ -124,6 +263,7 @@ void mc_driver_cpu(mc_grids_t grids, double beta, double h, int* grid_fate, mc_s
     double up_thr = calc.up_thr;
     int ninputs = calc.ninputs;
     int initial_spin = calc.initial_spin;
+    char *dynamics = calc.dynamics;
     char *filename = calc.filename;
 
     // Number of grids per input grid
@@ -259,8 +399,14 @@ void mc_driver_cpu(mc_grids_t grids, double beta, double h, int* grid_fate, mc_s
 
 
       // MC Sweep - CPU
-      for (igrid=0;igrid<ngrids;igrid++) {
-        mc_sweep_cpu(L, ising_grids, igrid, beta, h, sweeps_per_call);
+      if (strcmp(dynamics, "kawasaki") == 0) {
+        for (igrid=0;igrid<ngrids;igrid++) {
+          mc_sweep_kawasaki_cpu(L, ising_grids, igrid, beta, h, sweeps_per_call);
+        }
+      } else { // default to spin flip
+          for (igrid=0;igrid<ngrids;igrid++) {
+            mc_sweep_cpu(L, ising_grids, igrid, beta, h, sweeps_per_call);
+          }
       }
       isweep += sweeps_per_call;
 

@@ -23,6 +23,7 @@ typedef struct {
   char* cv;          // Collective variable on which thresholds are defined
   float* result;     // Pointer to result array 
   char* filename;    // Filename for output of grids to disk
+  char* dynamics;    // "kawasaki" or "spin_flip"
 } mc_function_t;
 
 

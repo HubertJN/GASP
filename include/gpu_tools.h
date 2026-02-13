@@ -6,12 +6,6 @@
 #include <curand_kernel.h>
 
 
-// GPU device in use
-//int gpu_idev = -1;
-
-// Number of SMs available
-//int gpu_nsm = -1;
-
 // Prototype for function which initialises gpu
 int gpuInitDevice(int deviceIndex, int* gpu_nsms);
 

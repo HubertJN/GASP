@@ -78,6 +78,8 @@ int main (int argc, char *argv[]) {
   h               = atof(argv[9]);  // Magnetic field
   itask           = atof(argv[10]); // Calculation task
 
+  char cv[] = "magnetisation";             // Collective variable to use in determining fate
+
 /*=================================
    Delete old output 
   ================================*/
@@ -151,10 +153,10 @@ int main (int argc, char *argv[]) {
 
     mc_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
     mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
-    mc_function_t calc; calc.itask = itask; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = &result;
+    mc_function_t calc; calc.itask = itask; calc.cv = cv; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = &result;
 
     // Perform the MC simulations
-    mc_driver_cpu(grids, beta, h, grid_fate, samples, calc, write_ising_grids);
+    mc_driver_cpu(grids, beta, h, grid_fate, samples, calc, write_ising_grids); 
 
   }
 
@@ -182,7 +184,7 @@ int main (int argc, char *argv[]) {
     mc_gpu_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
     grids.d_ising_grids = d_ising_grids; grids.d_neighbour_list = d_neighbour_list;
     mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
-    mc_function_t calc; calc.itask = itask; calc.cv = "magnetisation"; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = &result;
+    mc_function_t calc; calc.itask = itask; calc.cv = cv; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = &result;
     gpu_run_t gpu_state; gpu_state.d_state = d_state;  gpu_state.threadsPerBlock = threadsPerBlock; gpu_state.gpu_method = gpu_method;
 
     mc_driver_gpu(grids, beta, h, grid_fate, samples, calc, gpu_state, write_ising_grids);
