@@ -10,6 +10,7 @@ import math
 parser = argparse.ArgumentParser()
 parser.add_argument("--beta", type=float, help="Override beta value")
 parser.add_argument("--h", type=float, help="Override h value")
+parser.add_argument("--target", type=float, help="Target value for sampling")
 args = parser.parse_args()
 
 # --- Load config ---
@@ -18,6 +19,7 @@ config = load_config("config.yaml")
 # Apply overrides if provided
 beta = args.beta if args.beta is not None else config.parameters.beta
 h = args.h if args.h is not None else config.parameters.h
+target_val = args.target if args.target is not None else config.collective_variable.target
 
 # --- Load only headers and attributes first ---
 inname = config.paths.gridstates
@@ -28,7 +30,6 @@ if args.beta is not None or args.h is not None:
 
 _, attrs, headers = load_into_array(inname, load_grids=False)
 
-target_val = 110
 tolerance = abs(0.66*target_val)
 sigma = tolerance
 size_mult = 0.2
