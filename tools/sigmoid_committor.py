@@ -45,7 +45,7 @@ cluster = attrs[:, 1]
 
 gpu_nsms = gasp.gpu_nsms - gasp.gpu_nsms % config.gpu.sm_mult
 ngrids = 4 * gpu_nsms * 32
-conc_calc = min(int(np.round(ngrids / config.comm.ngrids)), gpu_nsms)
+conc_calc = min(int(np.round(ngrids / config.sig.ngrids)), gpu_nsms)
 
 # Targets to sample (your choice; this is what you had)
 clust_to_sample = np.linspace(cluster.min(), cluster.max(), conc_calc)
@@ -75,7 +75,7 @@ for start in range(0, len(sample_idx), conc_calc):
 
     pBfast = np.array(
         gasp.run_committor_calc(
-            L, ngrids, config.comm.nsweeps, beta, h,
+            L, ngrids, config.sig.nsweeps, beta, h,
             grid_output_int=50000,
             mag_output_int=1,
             grid_input="NumPy",
@@ -127,7 +127,7 @@ y_fit = sigmoid(x_fit, *popt)
 
 # Print cluster that corresponds to committor ~0.5
 x0 = popt[1]
-print(f"Estimated critical cluster size (committor ~ 0.5): {x0:.2f}")
+print(int(x0))
 
 plt.figure(figsize=(6,6))
 plt.errorbar(
@@ -157,4 +157,4 @@ with open(csv_path, "a", newline="") as f:
     writer = csv.writer(f)
     if needs_header:
         writer.writerow(["h", "beta", "dn", "target"])
-    writer.writerow([f"{h:.3f}", f"{beta:.3f}", int(dn_threshold), f"{x0:.2f}"])
+    writer.writerow([f"{h:.3f}", f"{beta:.3f}", int(dn_threshold), int(x0)])
