@@ -30,13 +30,13 @@ if args.beta is not None or args.h is not None:
 
 _, attrs, headers = load_into_array(inname, load_grids=False)
 
-tolerance = abs(0.66*target_val)
+tolerance = abs(0.33*target_val)
 sigma = tolerance
 size_mult = 0.2
 skew = 0
 
 val_min = 1
-val_max = 800
+val_max = config.collective_variable.up_threshold
 num_bins = 256
 max_samples = 140*8*config.gpu.tasks
 
