@@ -200,21 +200,12 @@ int create_ising_grids_hdf5(int L, int ngrids, int tot_nsweeps, double h, double
     H5Sclose(space);
     H5Pclose(dcpl);
 
-<<<<<<< HEAD
-    /* Create attrs dataset: 5 doubles per row */
-    hsize_t adims[2] = {0, 5};
-    hsize_t amax[2] = {H5S_UNLIMITED, 5};
-    space = H5Screate_simple(2, adims, amax);
-    dcpl = H5Pcreate(H5P_DATASET_CREATE);
-    hsize_t achunk[2] = {1024, 5};
-=======
     /* Create attrs dataset: 4 doubles per row */
     hsize_t adims[2] = {0, 4};
     hsize_t amax[2] = {H5S_UNLIMITED, 4};
     space = H5Screate_simple(2, adims, amax);
     dcpl = H5Pcreate(H5P_DATASET_CREATE);
     hsize_t achunk[2] = {1024, 4};
->>>>>>> 5ee985a88ae1590a18f1f3a0ee12b7ee2337ae15
     H5Pset_chunk(dcpl, 2, achunk);
     hid_t d_attrs = H5Dcreate2(file_id, "attrs", H5T_NATIVE_DOUBLE, space,
                                H5P_DEFAULT, dcpl, H5P_DEFAULT);
