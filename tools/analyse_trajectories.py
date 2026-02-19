@@ -2,6 +2,8 @@ import argparse
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
+import csv
+import os
 from tools.utils import load_config, load_into_array
 
 # --- parse optional inputs ---
@@ -64,8 +66,20 @@ plt.ylabel('Frequency')
 plt.title('Histogram of Cluster Values')
 plt.xlim(cluster_min - 0.5, 100.5)
 
-print(int(bin_center))
-
 plt.tight_layout()
 plt.savefig(f"{plot_dir}/cluster_hist_{beta:.3f}_{h:.3f}.pdf")
 plt.close()
+
+dn = int(bin_center)
+print(dn)
+
+csv_path = "h_beta_dn.csv"
+
+# Append to CSV (write header only if the file doesn't exist or is empty)
+needs_header = (not os.path.exists(csv_path)) or (os.path.getsize(csv_path) == 0)
+
+with open(csv_path, "a", newline="") as f:
+    writer = csv.writer(f)
+    if needs_header:
+        writer.writerow(["h", "beta", "dn"])
+    writer.writerow([f"{h:.3f}", f"{beta:.3f}", int(dn)])
