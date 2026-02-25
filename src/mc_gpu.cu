@@ -12,12 +12,27 @@ extern "C" {
 }
   
 // Cache of acceptance probabilities 
-__constant__ float d_Pacc[20];   // gpu constant memory
+__constant__ float d_Pacc[20];           // gpu constant memory - spin flip case
+__constant__ float d_PaccKaw_2NN[100];   // gpu constant memory - Kawasaki NN case
 
 // Dynamic shared memory for storage of bits
 extern __shared__ uint8_t shared_grid[];
 
-// populate acceptance probabilities
+// Compute the index within PaccKaw_2NN for a given move. The index is determined 
+// by the spins of the two sites being swapped (Si, Sj) and the sum of their 4 nearest
+// neighbours (Ni, Nj). Each of these can take on a limited number of values, so we can
+// pre-compute the acceptance probabilities for all combinations and store them in an
+// array for fast lookup during the simulation.
+static __device__ __host__ inline int kawasaki_index_4NN(int si, int sj, int n_i, int n_j) {
+  int Si = (si + 1) / 2;    // 0 or 1
+  int Sj = (sj + 1) / 2;    // 0 or 1
+  int Ni = (n_i + 4) / 2;   // 0..4
+  int Nj = (n_j + 4) / 2;   // 0..4
+  return (((Si * 2 + Sj) * 5 + Ni) * 5 + Nj); // 0..99
+}
+
+
+// populate acceptance probabilities - spin flip case
 void preComputeProbs_gpu(double beta, double h) {
 
     float *h_Pacc=(float *)malloc(20*sizeof(float));
@@ -35,6 +50,54 @@ void preComputeProbs_gpu(double beta, double h) {
     free(h_Pacc);
 
   }  
+
+
+// populate acceptance probabilities - Kawasaki NN case
+void preComputeProbsKawasaki_4NN_gpu(double beta, double h_ignored) {
+
+  float *h_PaccKaw_2NN=(float *)malloc(100*sizeof(float));
+
+  int si_vals[2] = {-1, +1};
+  int sj_vals[2] = {-1, +1};
+  int n_vals[5]  = {-4, -2, 0,  2,  4};
+
+  for (int a = 0; a < 2; ++a) {
+    int si = si_vals[a];
+    for (int b = 0; b < 2; ++b) {
+      int sj = sj_vals[b];
+
+      for (int u = 0; u < 5; ++u) {
+        int n_i = n_vals[u];
+        for (int v = 0; v < 5; ++v) {
+          int n_j = n_vals[v];
+
+          int idx = kawasaki_index_4NN(si, sj, n_i, n_j);
+
+          double dE;
+          if (si == sj) {
+            // Swapping identical spins leaves configuration unchanged.
+            dE = 0.0;
+          } else {
+            // Use 3-NN sums derived from 4-NN sums:
+            int Sigma_i_excl = n_i - sj; // sum of the 3 neighbors of i excluding j
+            int Sigma_j_excl = n_j - si; // sum of the 3 neighbors of j excluding i
+            dE = 2.0 * (si * Sigma_i_excl + sj * Sigma_j_excl); // J = 1
+          }
+
+          double w = exp(-beta * dE);
+          // If you want pure Metropolis prob, clamp to 1.0:
+          // if (w > 1.0) w = 1.0;
+          h_PaccKaw_2NN[idx] = w;
+        }
+      }
+    }
+  }
+
+    gpuErrchk( cudaMemcpyToSymbol(d_PaccKaw_2NN, h_PaccKaw_2NN, sizeof(float)*100,0, cudaMemcpyHostToDevice ) );
+    free(h_PaccKaw_2NN);
+
+}
+
 
 void preComputeNeighbours_gpu(const int L, int *d_ising_grids, int *d_neighbour_list){
 
@@ -127,6 +190,124 @@ __global__ void mc_sweep_gpu(const int L, curandState *state, const int ngrids, 
           // accept
           loc_grid[my_idx] = -1*spin;
       } 
+      
+      // Try avoiding the branch entirely - this seems quite slow
+      //diff = curand_uniform(&localState) - d_Pacc[index] ;
+      //spin = spin * lrintf(copysignf(1.0f,diff)); 
+      //loc_grid[my_idx] = spin;
+
+      // This is even slower (and has a hidden branch)
+      //diff = curand_uniform(&localState) - d_Pacc[index] ;
+      //spin = signbit(diff) ? -1*spin : spin ;
+      //loc_grid[my_idx] = spin;
+      
+    } //end for
+
+
+    // Copy local data back to device global memory
+    state[idx] = localState;
+
+  }
+
+  return;
+
+}
+
+// sweep on the gpu - default Kawasaki version
+__global__ void mc_sweep_kawasaki_gpu(const int L, curandState *state, const int ngrids, int *d_ising_grids, int *d_neighbour_list, const float beta, const float h, int nsweeps) {
+
+  int idx = threadIdx.x+blockIdx.x*blockDim.x;
+  int index;
+
+  if (idx < ngrids) {
+
+    // local copy of RNG state for current threads 
+    curandState localState = state[idx];
+
+    int N = L*L;
+    float shrink = (1.0f - FLT_EPSILON)*(float)N;
+
+    // Pointer to local grid
+    int *loc_grid = &d_ising_grids[idx*N]; // pointer to device global memory 
+
+
+    int imove, my_idx, spin, n1, n2, n3, n4, row, col;
+    int my_dn_idx, my_up_idx, my_rt_idx, my_lt_idx;
+  
+    // count number of up spins
+    int n_up = 0;
+    for (int i = 0; i < L*L; i++) {
+      if (loc_grid[i] == 1) n_up++;
+    }
+
+    // Loop over number of moves - note that we loop over number of up spins rather than total number of spins,
+    // since we are only picking from the up spins.
+    for (imove=0;imove<N*nsweeps;imove++){
+
+      do {
+        my_idx = __float2int_rd(shrink*curand_uniform(&localState));
+        spin = loc_grid[my_idx];
+      } while (spin != 1); // Ensure we only select up spins
+
+      row = my_idx/L;
+      col = my_idx%L;
+
+      // find neighbours
+      my_dn_idx = loc_grid[L*((row+1)%L) + col];
+      my_up_idx = loc_grid[L*((row+L-1)%L) + col];
+      my_rt_idx = loc_grid[L*row + (col+1)%L];
+      my_lt_idx = loc_grid[L*row + (col+L-1)%L];
+
+      // pick random neighbour to swap with
+      int n_idx;
+      int n_row, n_col;
+      int direction = floor(4*curand_uniform(&localState));
+      if (direction == 0) { // up
+        n_row = (row + L - 1) % L;
+        n_col = col;
+        n_idx = my_up_idx;
+      } else if (direction == 1) { // down
+        n_row = (row + 1) % L;
+        n_col = col;
+        n_idx = my_dn_idx;
+      } else if (direction == 2) { // right
+        n_row = row;
+        n_col = (col + 1) % L;
+        n_idx = my_rt_idx;
+      } else { // left
+        n_row = row;
+        n_col = (col + L - 1) % L;
+        n_idx = my_lt_idx;
+      }
+
+      // find neighbours of n_idx
+      int n_up_idx = L*((n_row+L-1)%L) + n_col;  
+      int n_dn_idx = L*((n_row+1)%L)   + n_col;   
+      int n_rt_idx = L*n_row + (n_col+1)%L;
+      int n_lt_idx = L*n_row + (n_col+L-1)%L;
+
+      // compute index for acceptance probability lookup
+      int si = loc_grid[my_idx];
+      int sj = loc_grid[n_idx];
+      int n_i = loc_grid[my_up_idx] + loc_grid[my_dn_idx] + loc_grid[my_lt_idx] + loc_grid[my_rt_idx];
+      int n_j = loc_grid[n_up_idx] + loc_grid[n_dn_idx] + loc_grid[n_lt_idx] + loc_grid[n_rt_idx];
+      int index = kawasaki_index_4NN(si, sj, n_i, n_j);
+
+      // perform swap    int temp = loc_grid[my_idx];
+      int temp = loc_grid[my_idx];
+      loc_grid[my_idx] = loc_grid[n_idx];
+      loc_grid[n_idx] = temp;
+
+      // The store back to global memory, not the branch or the RNG generation
+      // seems to be the killer here.
+      if (curand_uniform(&localState) < d_PaccKaw_2NN[index] ) {
+          // accept
+      } else {
+          // reject - swap back
+          temp = loc_grid[my_idx];
+          loc_grid[my_idx] = loc_grid[n_idx];
+          loc_grid[n_idx] = temp;
+      }
       
       // Try avoiding the branch entirely - this seems quite slow
       //diff = curand_uniform(&localState) - d_Pacc[index] ;

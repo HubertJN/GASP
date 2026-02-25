@@ -27,6 +27,9 @@ typedef struct {
 // pre-compute acceptance probabilities for spin flips
 void preComputeProbs_gpu(double beta, double h);
 
+// pre-compute acceptance probabilities for Kawasaki NN swaps
+void preComputeProbsKawasaki_4NN_gpu(double beta, double h);
+
 // pre-compute neighbours
 void preComputeNeighbours_gpu(const int L, int *d_ising_grids, int *d_neighbour_list);
 

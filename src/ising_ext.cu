@@ -48,11 +48,11 @@ extern "C" {
  * Module level variables controlling GPU execution 
  * ----------------------------------------------*/
 
-bool run_gpu = true;    // Run using GPU
-bool run_cpu = false;   // Run using CPU
+bool run_gpu = false;    // Run using GPU
+bool run_cpu = true;     // Run using CPU
 
 int idev = -1; // GPU device to use
-int gpu_nsms;  // Number of multiprocessors on the GPU
+int gpu_nsms = 1;  // Number of multiprocessors on the GPU
 
 /* -----------------------------------------------
  * Module level storage for sampled grids and CVs 
@@ -652,7 +652,17 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
     init_genrand(rngseed);
 
     /* Precompute acceptance probabilities for flip moves */
-    preComputeProbs_cpu(beta, h);
+    if (strcmp(dynamics, "spin_flip") == 0) {
+      preComputeProbs_cpu(beta, h);
+    } else if (strcmp(dynamics, "kawasaki") == 0) {
+      preComputeProbsKawasaki_4NN_cpu(beta, h);
+    } else {
+      PyErr_SetString(PyExc_ValueError, "Invalid dynamics specified");
+      free(ising_grids);
+      if (grid_fate) free(grid_fate);
+      free(result);
+      return NULL;
+    }
 
     /* Pack arguments into structures */
     mc_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
@@ -691,7 +701,18 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
     gpuInitRand(ngrids, threadsPerBlock, rngseed, &d_state);
 
     /* Precompute acceptance probabilities for flip moves */
-    preComputeProbs_gpu(beta, h);
+    if (strcmp(dynamics, "spin_flip") == 0) {
+      preComputeProbs_gpu(beta, h);
+    } else if (strcmp(dynamics, "kawasaki") == 0) {
+      preComputeProbsKawasaki_4NN_gpu(beta, h);
+    } else {
+      PyErr_SetString(PyExc_ValueError, "Invalid dynamics specified");
+      free(ising_grids);
+      if (grid_fate) free(grid_fate);
+      //if (grid_array_c) free(grid_array_c);
+      free(result);
+      return NULL;
+    }
 
     /* Pack arguments into structures */
     mc_gpu_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
@@ -779,6 +800,8 @@ beta : float\n\
     Inverse temperature.\n\
 h : float\n\
     Magnetic field.\n\
+dynamics: str\n\
+    Dynamics to use for the committor calculation ('spin_flip' or 'kawasaki').\n\
 initial_spin : int, optional\n\
     Initial majority spin in the parent phase (default: -1).\n\
 cv : str, optional\n\
@@ -1030,8 +1053,19 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
     /* Initialise host RNG */
     init_genrand(rngseed);
 
-    /* Precompute acceptance probabilities for flip moves */
-    preComputeProbs_cpu(beta, h);
+   /* Precompute acceptance probabilities for flip moves */
+    if (strcmp(dynamics, "spin_flip") == 0) {
+      preComputeProbs_cpu(beta, h);
+    } else if (strcmp(dynamics, "kawasaki") == 0) {
+      preComputeProbsKawasaki_4NN_cpu(beta, h);
+    } else {
+      PyErr_SetString(PyExc_ValueError, "Invalid dynamics specified");
+      free(ising_grids);
+      if (grid_fate) free(grid_fate);
+      free(result);
+      return NULL;
+    }
+    
 
     /* Pack arguments into structures */  
     mc_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
@@ -1065,7 +1099,18 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
     gpuInitRand(ngrids, threadsPerBlock, rngseed, &d_state);
 
     /* Precompute acceptance probabilities for flip moves */
-    preComputeProbs_gpu(beta, h);
+    if (strcmp(dynamics, "spin_flip") == 0) {
+      preComputeProbs_gpu(beta, h);
+    } else if (strcmp(dynamics, "kawasaki") == 0) {
+      preComputeProbsKawasaki_4NN_gpu(beta, h);
+    } else {
+      PyErr_SetString(PyExc_ValueError, "Invalid dynamics specified");
+      free(ising_grids);
+      if (grid_fate) free(grid_fate);
+      if (grid_array_c) free(grid_array_c);
+      free(result);
+      return NULL;
+    }
 
     /* Pack arguments into structures */
     mc_gpu_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
@@ -1203,6 +1248,9 @@ PyMODINIT_FUNC PyInit_gasp(void) {
       run_gpu=false;
     }
     
+  } else {
+    printf("GPU acceleration disabled. Running on CPU.\n");
+    gpu_nsms = 1; // Set gpu_nsms to 1 if not using GPU
   }
 
   /* Create a module level object to hold the history of grids */

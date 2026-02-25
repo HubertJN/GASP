@@ -34,6 +34,9 @@ typedef int (*GridOutputFunc)(int L, int ngrids, int* grid_data, int isweep, flo
 // pre-compute acceptance probabilities for spin flips
 void preComputeProbs_cpu(double beta, double h);
 
+// pre-compute acceptance probabilities for Kawasaki NN swaps
+void preComputeProbsKawasaki_4NN_cpu(double beta, double h);
+
 // sweep on the cpu
 void mc_sweep_cpu(int L, int *ising_grids, int grid_index, double beta, double h, int nsweeps);
 

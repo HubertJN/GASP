@@ -60,6 +60,8 @@ void preComputeProbsKawasaki_4NN_cpu(double beta, double h_ignored) {
           // If you want pure Metropolis prob, clamp to 1.0:
           // if (w > 1.0) w = 1.0;
           PaccKaw_2NN[idx] = w;
+          //PySys_WriteStdout("Kawasaki move: index=%d, Si=%d, Sj=%d, Ni=%d, Nj=%d => dE=%.2f, Pacc=%.4f\n", 
+          //        idx, si, sj, n_i, n_j, dE, w);
         }
       }
     }
@@ -105,11 +107,23 @@ void mc_sweep_kawasaki_cpu(int L, int *ising_grids, int grid_index, double beta,
 
   int imove, row, col;
 
-  for (imove=0;imove<L*L*nsweeps;imove++){
+  // count number of up spins
+  int n_up = 0;
+  for (int i = 0; i < L*L; i++) {
+    if (loc_grid[i] == 1) n_up++;
+  }
+
+  for (imove=0;imove<n_up*nsweeps;imove++){
 
     // pick random spin
-    row = floor(L*genrand_real3());  // RNG cannot generate 1.0 so safe
-    col = floor(L*genrand_real3()); 
+    //row = floor(L*genrand_real3());  // RNG cannot generate 1.0 so safe
+    //col = floor(L*genrand_real3()); 
+
+    // pick a random spin up site
+    do {
+      row = floor(L*genrand_real3());
+      col = floor(L*genrand_real3());
+    } while (loc_grid[L*row+col] != 1); // Keep picking until we find a spin up site
 
     // find neighbours
     int my_idx = L*row+col;
@@ -162,7 +176,7 @@ void mc_sweep_kawasaki_cpu(int L, int *ising_grids, int grid_index, double beta,
     //if (xi < prob) {
     if (xi < PaccKaw_2NN[index] ) {
       // accept
-      //fprintf(stderr,"Accepted a move\n");
+      //printf("Accepted a move\n");
     } else {
       // reject - swap back
       temp = loc_grid[my_idx];
