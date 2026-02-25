@@ -316,10 +316,20 @@ void mc_driver_cpu(mc_grids_t grids, double beta, double h, int* grid_fate, mc_s
 
 
     // result - either fraction of nucleated trajectories (itask=0) or comittor(s) (itask=1)
+    // also allocate the nucleated array to track which grids have nucleated for itask=0
     float *result;
+    int *nucleated; 
     int result_size;
     if (itask==0) {
       result_size = tot_nsweeps/mag_output_int;
+      nucleated = (int *)malloc(ngrids*sizeof(int));
+      if (nucleated==NULL) {
+        fprintf(stderr,"Error allocating nucleated array!\n");
+        exit(EXIT_FAILURE);
+      }
+      for (igrid=0;igrid<ngrids;igrid++){
+        nucleated[igrid] = -1; // Initialise as not nucleated
+      }
     } else if (itask==1) {
       result_size = ninputs;
     } else {
@@ -356,7 +366,12 @@ void mc_driver_cpu(mc_grids_t grids, double beta, double h, int* grid_fate, mc_s
         if ( itask == 0 ) { // Report how many samples have nucleated.
           int nnuc = 0;
           for (igrid=0;igrid<ngrids;igrid++){
-            if ( colvar[igrid] > up_thr ) nnuc++;
+            if (( colvar[igrid] > up_thr) && (nucleated[igrid] == -1 )) {
+              nucleated[igrid] = 1; // Mark as nucleated
+            }
+            if (nucleated[igrid] == 1) {
+              nnuc++; 
+            }
           }
 #ifndef PYTHON
           fprintf(stdout, "%10d  %12.6f\n",isweep, (double)nnuc/(double)ngrids);
@@ -463,6 +478,7 @@ void mc_driver_cpu(mc_grids_t grids, double beta, double h, int* grid_fate, mc_s
     }
 
     if (result) free(result);
+    if (nucleated) free(nucleated);
 
 
 }

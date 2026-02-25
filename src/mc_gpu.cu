@@ -808,9 +808,18 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
 
     // result - either fraction of nucleated trajectories at each snapshot (itask=0) or comittor(s) (itask=1)
     float *result;
+    int *nucleated; // only used for itask=0
     int result_size;
     if (itask==0) {
       result_size = tot_nsweeps/mag_output_int;
+      nucleated = (int *)malloc(ngrids*sizeof(int)); // track which grids have reached the nucleated state for first time
+      if (nucleated==NULL) {
+        fprintf(stderr,"Error allocating nucleated array!\n");
+        exit(EXIT_FAILURE);
+      }
+       for (igrid=0;igrid<ngrids;igrid++){
+        nucleated[igrid] = -1;
+      }
     } else if (itask==1) {
       result_size = ninputs;
     } else {
@@ -900,7 +909,12 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
         if ( itask == 0 ) { // Report how many samples have nucleated.
           int nnuc = 0;
           for (igrid=0;igrid<ngrids;igrid++){
-            if ( colvar[igrid] > up_thr ) nnuc++;
+            if ( (colvar[igrid] > up_thr) && (nucleated[igrid] == -1) ) {
+              nucleated[igrid] = 1; // Mark as nucleated
+            }
+            if (nucleated[igrid] == 1) {
+              nnuc++; 
+            }
           }
           result[isweep/mag_output_int] = (float)((double)nnuc/(double)ngrids);
 #ifndef PYTHON
@@ -1008,5 +1022,7 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
     }
       
     if (result) free(result);
-
+    if (nucleated) free(nucleated);
+    if (grid_fate) free(grid_fate);
+  
 }
