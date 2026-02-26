@@ -808,7 +808,7 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
 
     // result - either fraction of nucleated trajectories at each snapshot (itask=0) or comittor(s) (itask=1)
     float *result;
-    int *nucleated; // only used for itask=0
+    int *nucleated = NULL; // only used for itask=0
     int result_size;
     if (itask==0) {
       result_size = tot_nsweeps/mag_output_int;
@@ -1023,6 +1023,5 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
       
     if (result) free(result);
     if (nucleated) free(nucleated);
-    if (grid_fate) free(grid_fate);
   
 }

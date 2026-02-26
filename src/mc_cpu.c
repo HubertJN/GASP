@@ -318,7 +318,7 @@ void mc_driver_cpu(mc_grids_t grids, double beta, double h, int* grid_fate, mc_s
     // result - either fraction of nucleated trajectories (itask=0) or comittor(s) (itask=1)
     // also allocate the nucleated array to track which grids have nucleated for itask=0
     float *result;
-    int *nucleated; 
+    int *nucleated = NULL; 
     int result_size;
     if (itask==0) {
       result_size = tot_nsweeps/mag_output_int;
