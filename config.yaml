@@ -2,7 +2,7 @@ simulation:
     L: 64
     ngrids_factor: 4
     threads_per_block: 32
-    nsweeps: 10000
+    nsweeps: 100000
 
 sig:
     ngrids: 512
@@ -21,7 +21,7 @@ output:
 
 collective_variable:
     type: "largest_cluster"
-    up_threshold: 3072
+    up_threshold: 2500
     dn_threshold: 19.5
 
 paths:
