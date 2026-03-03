@@ -169,4 +169,4 @@ with open(csv_path, "a", newline="") as f:
     writer = csv.writer(f)
     if needs_header:
         writer.writerow(["h", "beta", "dn", "target"])
-    writer.writerow([f"{h:.3f}", f"{beta:.3f}", int(dn_threshold), int(x0)])
+    writer.writerow([f"{h:.3f}", f"{beta:.3f}", int(dn_threshold), int(x_at_half)])
