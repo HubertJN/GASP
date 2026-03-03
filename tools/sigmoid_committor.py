@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--beta", type=float, help="Override beta value")
 parser.add_argument("--h", type=float, help="Override h value")
 parser.add_argument("--dn", type=float, help="Override dn_threshold value")
+parser.add_argument("--max-cluster", type=float, help="Override max cluster value")
 args = parser.parse_args()
 
 # --- Load config ---
@@ -48,7 +49,8 @@ ngrids = 4 * gpu_nsms * 32
 conc_calc = min(int(np.round(ngrids / config.sig.ngrids)), gpu_nsms)
 
 # Targets to sample (your choice; this is what you had)
-clust_to_sample = np.linspace(cluster.min(), cluster.max(), conc_calc)
+cluster_max = args.max_cluster if args.max_cluster is not None else cluster.max()
+clust_to_sample = np.linspace(cluster.min(), cluster_max, conc_calc)
 
 # Nearest-neighbour selection (allows duplicates if cluster is sparse)
 sample_idx = np.array([np.argmin(np.abs(cluster - t)) for t in clust_to_sample], dtype=int)
