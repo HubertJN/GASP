@@ -112,6 +112,14 @@ def sigmoid(x, k, x0):
     base0 = 1 / (1 + np.exp(k * x0))
     return (base - base0) / (1 - base0 + 1e-10)
 
+def sigmoid_inv(y, k, x0):
+    base0 = 1.0 / (1.0 + np.exp(k * x0))
+    denom = (1.0 - base0)
+    base = y * denom + base0
+    eps = 1e-12
+    base = np.clip(base, eps, 1.0 - eps)
+    return x0 + (1.0 / k) * np.log(base / (1.0 - base))
+
 try:
     with np.errstate(divide='ignore', invalid='ignore'):
         popt, _ = curve_fit(
@@ -128,8 +136,10 @@ x_fit = np.linspace(test_cluster_size.min(), test_cluster_size.max(), 200)
 y_fit = sigmoid(x_fit, *popt)
 
 # Print cluster that corresponds to committor ~0.5
-x0 = popt[1]
-print(int(x0))
+k_hat, x0_hat = popt
+# x corresponding to committor y = 0.5
+x_at_half = int(sigmoid_inv(0.5, k_hat, x0_hat))
+print(x_at_half)
 
 plt.figure(figsize=(6,6))
 plt.errorbar(
