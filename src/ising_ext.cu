@@ -358,7 +358,7 @@ int append_grids_list(int L, int ngrids, int* grid_data, int isweep, float* magn
   } // end if recording largest cluster size
 
   // Always call the hdf5 writer
-  if (strcmp(filename, "None") != 0) {
+  if (strcasecmp(filename, "None") != 0) {
   int iret = write_ising_grids_hdf5(L, ngrids, grid_data, isweep, magnetisation, lclus_size, cv, dn_thr, up_thr, filename);
     
   if (iret != 0) {
