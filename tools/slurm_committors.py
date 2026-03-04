@@ -70,7 +70,8 @@ with h5py.File(outpath, "w") as fo:
                 up_threshold=up_threshold,
                 keep_grids=False,
                 nsms=gpu_nsms,
-                gpu_method=2
+                gpu_method=2,
+                outname="None",
             )
         )
 
