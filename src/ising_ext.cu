@@ -359,17 +359,17 @@ int append_grids_list(int L, int ngrids, int* grid_data, int isweep, float* magn
 
   // Always call the hdf5 writer
   if (strcasecmp(filename, "None") != 0) {
-  int iret = write_ising_grids_hdf5(L, ngrids, grid_data, isweep, magnetisation, lclus_size, cv, dn_thr, up_thr, filename);
-    
-  if (iret != 0) {
-    PyErr_SetString(PyExc_RuntimeError, "Error writing HDF5 file");
-    return -1;
-  }
+    int iret = write_ising_grids_hdf5(L, ngrids, grid_data, isweep, magnetisation, lclus_size, cv, dn_thr, up_thr, filename);
+      
+    if (iret != 0) {
+      PyErr_SetString(PyExc_RuntimeError, "Error writing HDF5 file");
+      return -1;
+    }
 
-  // If we're maintaining a history of grids in RAM then proceed, otherwise we're done
-  if (!grid_history || ihist >= maxhist) {
-    return iret;
-  }
+    // If we're maintaining a history of grids in RAM then proceed, otherwise we're done
+    if (!grid_history || ihist >= maxhist) {
+      return iret;
+    }
   }
 
   // Dimensions of NumPy array member of GridSnapObjects
@@ -664,8 +664,9 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
 #endif
 
     /* Create HDF5 file and write attributes */
-    create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
-    
+    if (strcasecmp(calc.filename, "None") != 0) {
+      create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
+    }
     /* Perform simulations calling append_grids_list periodically */
     mc_driver_cpu(grids, beta, h, grid_fate, samples, calc, append_grids_list);
     
@@ -704,7 +705,9 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
 #endif
 
     /* Create HDF5 file and write attributes */
-    create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
+    if (strcasecmp(calc.filename, "None") != 0) {
+      create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
+    }
 
     /* Perform simulations calling append_grids_list periodically */
     mc_driver_gpu(grids, beta, h, grid_fate, samples, calc, gpu_state, append_grids_list);
@@ -1034,7 +1037,9 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
     calc.ninputs = grid_array_count; calc.result=result; calc.filename = outname;
 
     /* Create HDF5 file and write attributes */
-    //create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
+    if (strcasecmp(calc.filename, "None") != 0) {
+      create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
+    }
     
     /* Perform the MC simulations calling append_grids_list periodically */
     mc_driver_cpu(grids, beta, h, grid_fate, samples, calc, append_grids_list);
@@ -1070,8 +1075,9 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
     gpu_run_t gpu_state; gpu_state.d_state = d_state;  gpu_state.threadsPerBlock = threadsPerBlock; gpu_state.gpu_method = gpu_method;
 
     /* Create HDF5 file and write attributes */
-    //create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
-
+    if (strcasecmp(calc.filename, "None") != 0) {
+      create_ising_grids_hdf5(L, ngrids, tot_nsweeps, h, beta, calc.itask, calc.filename);
+    }
     /* Perform simulations calling append_grids_list periodically */
     mc_driver_gpu(grids, beta, h, grid_fate, samples, calc, gpu_state, append_grids_list);
     
