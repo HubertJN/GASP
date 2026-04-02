@@ -365,11 +365,11 @@ int append_grids_list(int L, int ngrids, int* grid_data, int isweep, float* magn
       PyErr_SetString(PyExc_RuntimeError, "Error writing HDF5 file");
       return -1;
     }
+  }
 
-    // If we're maintaining a history of grids in RAM then proceed, otherwise we're done
-    if (!grid_history || ihist >= maxhist) {
-      return iret;
-    }
+  // If we're maintaining a history of grids in RAM then proceed, otherwise we're done
+  if (!grid_history || ihist >= maxhist) {
+    return 0;
   }
 
   // Dimensions of NumPy array member of GridSnapObjects
