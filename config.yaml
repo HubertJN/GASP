@@ -2,7 +2,7 @@ simulation:
     L: 64
     ngrids_factor: 4
     threads_per_block: 32
-    nsweeps: 100000
+    nsweeps: 10000
 
 sig:
     ngrids: 512
