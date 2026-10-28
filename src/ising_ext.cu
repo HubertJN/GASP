@@ -576,10 +576,12 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
   }
 
   /* Sanity check that CV thresholds are sensible if using cluster size rather than magnetisation */
-  if (strcmp(cv, "largest_cluster") == 1) {
+  if (strcmp(cv, "largest_cluster") == 0) {
     // Warn if magnitude of up_threshold and dn_threshold are less than 2
     if (fabs(up_threshold) < 2.0 || fabs(dn_threshold) < 2.0) {
-      PyErr_SetString(PyExc_UserWarning, "For cv='largest_cluster', up_threshold and dn_threshold should have magnitudes >= 2");
+      if (PyErr_WarnEx(PyExc_UserWarning, "For cv='largest_cluster', up_threshold and dn_threshold should have magnitudes >= 2", 1) < 0) {
+        return NULL;
+      }
     }
   }
 
