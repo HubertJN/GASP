@@ -19,6 +19,9 @@ seed_grids            (n_seeds, L*L/8)  uint8, seed configuration as packed bits
 frames                (n_seeds, replicas, n_lags, L*L/8) uint8, packed bits
 run_seed              (n_runs,) uint64  RNG seed passed to GASP for each run
 run_done              (n_runs,) bool    set once a run's frames are written
+basin_frames          (nsms, replicas, n_lags, L*L/8) uint8, the same run started
+                      from all-down grids: a reference sample of the parent basin
+basin_seed            () uint64         RNG seed of the basin run
 
 Grids are packed exactly as in the training files: spin +1 -> bit 1, flattened
 row-major, np.packbits(..., bitorder="little"). Run k covers seeds
@@ -78,7 +81,7 @@ def create_file(path, args, training_path, L, nsms):
 
     rng = np.random.default_rng(args.rng_seed)
     seed_index = np.sort(rng.choice(len(attrs), size=n_seeds, replace=False))
-    run_seed = rng.integers(1, 2**63, size=args.runs, dtype=np.uint64)
+    run_seed = rng.integers(1, 2**63, size=args.runs + 1, dtype=np.uint64)
     seed_grids, _, _ = load_into_array(training_path, indices=seed_index)
 
     nbytes = L * L // 8
@@ -95,8 +98,9 @@ def create_file(path, args, training_path, L, nsms):
         f["seed_index"] = seed_index
         f["seed_attrs"] = attrs[seed_index]
         f["seed_grids"] = pack(seed_grids)
-        f["run_seed"] = run_seed
+        f["run_seed"] = run_seed[:-1]
         f["run_done"] = np.zeros(args.runs, dtype=bool)
+        f["basin_seed"] = run_seed[-1]
         f.create_dataset(
             "frames", shape=(n_seeds, args.replicas, len(lags), nbytes), dtype=np.uint8,
             chunks=(1, args.replicas, len(lags), nbytes),
@@ -146,11 +150,21 @@ def main():
         run_seed = f["run_seed"][()]
         run_done = f["run_done"][()]
         packed_seeds = f["seed_grids"][()]
+        basin_seed = f["basin_seed"][()]
+        basin_done = "basin_frames" in f
 
     seeds = np.unpackbits(packed_seeds, axis=1, bitorder="little")[:, : L * L]
     seeds = (seeds.astype(np.int8) * 2 - 1).reshape(-1, L, L)
 
     t0 = time.perf_counter()
+    if not basin_done:
+        down = -np.ones((nsms, L, L), dtype=np.int8)
+        frames = run_batch(down, args.replicas, lags, args.beta, args.h, basin_seed)
+        packed = pack(frames.reshape(-1, L, L)).reshape(nsms, args.replicas, len(lags), -1)
+        with h5py.File(out, "a") as f:
+            f["basin_frames"] = packed
+        print(f"[{tag}] basin reference run done", flush=True)
+
     for k in np.flatnonzero(~run_done):
         block = slice(k * nsms, (k + 1) * nsms)
         frames = run_batch(seeds[block], args.replicas, lags, args.beta, args.h, run_seed[k])
