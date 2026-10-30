@@ -9,12 +9,12 @@
 #SBATCH --job-name=committors
 #SBATCH --output=logs/out_%A_%a.txt
 #SBATCH --error=logs/err_%A_%a.txt
-#SBATCH --array=0-69%30
+#SBATCH --array=0-9%30
 
 set -euo pipefail
 
 module purge
-module load GCC/13.2.0 OpenMPI/4.1.6 CUDA Python HDF5
+module load GCC/13.2.0 OpenMPI/4.1.6 CUDA/12.6.0 Python HDF5
 
 cd /home/p/phunsc/GPU_2DIsing
 source .venv/bin/activate

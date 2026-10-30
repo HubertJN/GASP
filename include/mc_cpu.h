@@ -12,7 +12,21 @@ typedef struct {
   int tot_nsweeps;     // Max number of MC sweeps to perform 
   int mag_output_int;  // Interval at which to calculate magnetisation
   int grid_output_int; // Interval at which to write grids to file
+  int n_output_sweeps; // If > 0, write grids only at the sweeps listed in output_sweeps
+  int* output_sweeps;  // Sweeps at which to write grids (ignored unless n_output_sweeps > 0)
 } mc_sampler_t;
+
+// True if grids are due for output at this sweep: on the explicit schedule if
+// one was given, otherwise every grid_output_int sweeps
+static inline int grid_output_due(mc_sampler_t samples, int isweep) {
+  if (samples.n_output_sweeps > 0) {
+    for (int k = 0; k < samples.n_output_sweeps; k++) {
+      if (samples.output_sweeps[k] == isweep) return 1;
+    }
+    return 0;
+  }
+  return isweep % samples.grid_output_int == 0;
+}
 
 typedef struct {
   int itask;         // What to calculate?

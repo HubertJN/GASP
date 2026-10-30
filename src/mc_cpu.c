@@ -267,7 +267,7 @@ void mc_driver_cpu(mc_grids_t grids, double beta, double h, int* grid_fate, mc_s
       } 
 
       // Output grids to file
-      if (isweep%grid_output_int==0){
+      if (grid_output_due(samples, isweep)){
         outfunc(L, ngrids, ising_grids, isweep, magnetisation, lclus, cv, dn_thr, up_thr, filename);  
       }
 

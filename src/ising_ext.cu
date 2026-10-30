@@ -576,10 +576,12 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
   }
 
   /* Sanity check that CV thresholds are sensible if using cluster size rather than magnetisation */
-  if (strcmp(cv, "largest_cluster") == 1) {
+  if (strcmp(cv, "largest_cluster") == 0) {
     // Warn if magnitude of up_threshold and dn_threshold are less than 2
     if (fabs(up_threshold) < 2.0 || fabs(dn_threshold) < 2.0) {
-      PyErr_SetString(PyExc_UserWarning, "For cv='largest_cluster', up_threshold and dn_threshold should have magnitudes >= 2");
+      if (PyErr_WarnEx(PyExc_UserWarning, "For cv='largest_cluster', up_threshold and dn_threshold should have magnitudes >= 2", 1) < 0) {
+        return NULL;
+      }
     }
   }
 
@@ -655,7 +657,7 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
 
     /* Pack arguments into structures */
     mc_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
-    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
+    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int; samples.n_output_sweeps = 0; samples.output_sweeps = NULL;
     mc_function_t calc; calc.itask = 0; calc.cv = cv; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = result; calc.filename=outname;
 
     /* Write stdout output header*/
@@ -695,7 +697,7 @@ static PyObject* method_run_nucleation_swarm(PyObject* self, PyObject* args, PyO
     /* Pack arguments into structures */
     mc_gpu_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
     grids.d_ising_grids = d_ising_grids; grids.d_neighbour_list = d_neighbour_list;
-    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
+    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int; samples.n_output_sweeps = 0; samples.output_sweeps = NULL;
     mc_function_t calc; calc.initial_spin = initial_spin; calc.cv = cv; calc.itask = 0; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold; calc.ninputs = 1; calc.result = result; calc.filename=outname;
     gpu_run_t gpu_state; gpu_state.d_state = d_state;  gpu_state.threadsPerBlock = threadsPerBlock; gpu_state.gpu_method = gpu_method;
 
@@ -809,6 +811,11 @@ nsms : int, optional\n\
 \n\
 outname : str, optional\n\
     Name of grid output file (default: 'gridstates.hdf5').\n\
+grid_output_sweeps : sequence of int, optional\n\
+    Output grids only at these sweeps instead of every grid_output_int sweeps. Each entry must be a\n\
+    multiple of min(mag_output_int, grid_output_int) and less than tot_nsweeps; at most 64 entries.\n\
+seed : int, optional\n\
+    Random number seed. 0 (default) seeds from the clock.\n\
 Returns\n\
 -------\n\
 list of tuple\n\
@@ -850,17 +857,52 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
 
   int nsms = gpu_nsms;                               // Number of GPU multiprocessors to use (all by default)
 
+  PyObject* output_sweeps_obj = NULL;                // Explicit sweeps at which to output grids
+  static int output_sweeps[64];                      // Parsed copy of output_sweeps_obj
+  int n_output_sweeps = 0;                           // 0 means output every grid_output_int sweeps
+  unsigned long seed = 0;                            // RNG seed, 0 means seed from the clock
+
   /* list of keywords */
   static char* kwlist[] = {"L", "ngrid", "tot_nsweeps", "beta", "h",
     "initial_spin", "cv", "up_threshold", "dn_threshold", "mag_output_int",
-    "grid_output_int", "keep_grids", "max_keep_grids", "threadsPerBlock", "gpu_method", "grid_input", "grid_array", "nsms", "outname", NULL};
+    "grid_output_int", "keep_grids", "max_keep_grids", "threadsPerBlock", "gpu_method", "grid_input", "grid_array", "nsms", "outname",
+    "grid_output_sweeps", "seed", NULL};
 
   /* Parse the input tuple */ 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "iiidd|isddiipiiisOis", kwlist,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "iiidd|isddiipiiisOisOk", kwlist,
        &L, &ngrids, &tot_nsweeps, &beta, &h, &initial_spin, &cv,
        &up_threshold, &dn_threshold, &mag_output_int,
-       &grid_output_int, &keep_grids, &max_keep_grids, &threadsPerBlock, &gpu_method, &grid_input, &grid_array_obj, &nsms, &outname)) {
+       &grid_output_int, &keep_grids, &max_keep_grids, &threadsPerBlock, &gpu_method, &grid_input, &grid_array_obj, &nsms, &outname,
+       &output_sweeps_obj, &seed)) {
     return NULL;
+  }
+
+  if (seed != 0) { rngseed = seed; }
+
+  /* Validate grid_output_sweeps: each must land on a sweep the driver visits */
+  if (output_sweeps_obj != NULL && output_sweeps_obj != Py_None) {
+    PyObject* seq = PySequence_Fast(output_sweeps_obj, "grid_output_sweeps must be a sequence of ints");
+    if (!seq) return NULL;
+    Py_ssize_t n = PySequence_Fast_GET_SIZE(seq);
+    int step = mag_output_int < grid_output_int ? mag_output_int : grid_output_int;
+    if (n < 1 || n > 64) {
+      Py_DECREF(seq);
+      PyErr_SetString(PyExc_ValueError, "grid_output_sweeps must have between 1 and 64 entries");
+      return NULL;
+    }
+    for (Py_ssize_t k = 0; k < n; k++) {
+      long v = PyLong_AsLong(PySequence_Fast_GET_ITEM(seq, k));
+      if (v == -1 && PyErr_Occurred()) { Py_DECREF(seq); return NULL; }
+      if (v < 0 || v >= tot_nsweeps || v % step != 0) {
+        Py_DECREF(seq);
+        PyErr_Format(PyExc_ValueError,
+                     "grid_output_sweeps entry %ld must be in [0, tot_nsweeps) and a multiple of %d", v, step);
+        return NULL;
+      }
+      output_sweeps[k] = (int)v;
+    }
+    n_output_sweeps = (int)n;
+    Py_DECREF(seq);
   }
 
   /* Validate nsms argument */
@@ -957,7 +999,7 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
   if (grid_history != NULL) { free(grid_history); }
 
   /* Determine number of grids to allocate space for */
-  int nsnaps = tot_nsweeps/grid_output_int + 1;
+  int nsnaps = n_output_sweeps > 0 ? n_output_sweeps : tot_nsweeps/grid_output_int + 1;
   if (max_keep_grids){
     maxhist = max_keep_grids;
   } else {
@@ -1032,7 +1074,7 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
 
     /* Pack arguments into structures */  
     mc_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
-    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
+    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int; samples.n_output_sweeps = n_output_sweeps; samples.output_sweeps = output_sweeps;
     mc_function_t calc; calc.itask = 1; calc.initial_spin = initial_spin; calc.cv = cv; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold;
     calc.ninputs = grid_array_count; calc.result=result; calc.filename = outname;
 
@@ -1069,7 +1111,7 @@ static PyObject* method_run_committor_calc(PyObject* self, PyObject* args, PyObj
     /* Pack arguments into structures */
     mc_gpu_grids_t grids; grids.L = L; grids.ngrids = ngrids; grids.ising_grids = ising_grids;
     grids.d_ising_grids = d_ising_grids; grids.d_neighbour_list = d_neighbour_list;
-    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int;
+    mc_sampler_t samples; samples.tot_nsweeps = tot_nsweeps; samples.mag_output_int = mag_output_int; samples.grid_output_int = grid_output_int; samples.n_output_sweeps = n_output_sweeps; samples.output_sweeps = output_sweeps;
     mc_function_t calc; calc.itask = 1; calc.cv = cv; calc.initial_spin = initial_spin; calc.dn_thr = dn_threshold; calc.up_thr = up_threshold;
     calc.ninputs = grid_array_count; calc.result=result; calc.filename = outname;
     gpu_run_t gpu_state; gpu_state.d_state = d_state;  gpu_state.threadsPerBlock = threadsPerBlock; gpu_state.gpu_method = gpu_method;

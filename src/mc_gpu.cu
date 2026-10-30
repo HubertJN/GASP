@@ -663,7 +663,7 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
     while(isweep < tot_nsweeps){
 
       // Output grids to file
-      if (isweep%grid_output_int==0){
+      if (grid_output_due(samples, isweep)){
         // Asynchronous - can happen while magnetisation is being computed in stream 2
         gpuErrchk( cudaMemcpyAsync(ising_grids,d_ising_grids,L*L*ngrids*sizeof(int),cudaMemcpyDeviceToHost,stream1) );
       }
@@ -714,7 +714,7 @@ void mc_driver_gpu(mc_gpu_grids_t grids, double beta, double h, int* grid_fate, 
       }
       
       // Writing of the grids can be happening on the host while the device runs the mc_sweep kernel
-      if (isweep%grid_output_int==0 || isweep==tot_nsweeps-1){
+      if (grid_output_due(samples, isweep) || (samples.n_output_sweeps == 0 && isweep==tot_nsweeps-1)){
         outfunc(L, ngrids, ising_grids, isweep, magnetisation, lclus_size, cv, dn_thr, up_thr, filename);
       }
 
